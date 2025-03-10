@@ -1,5 +1,9 @@
-﻿using Microsoft.AspNetCore.Cors;
+﻿using DemoAPI.DBModel;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Net;
 
@@ -9,67 +13,62 @@ namespace DemoAPI.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class EmployeesController : ControllerBase
     {
+        private IConfiguration _configuration;
+        DemoNewDbContext context = new DemoNewDbContext();
+        public EmployeesController(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
         // GET: api/<EmployeesController>
         // controller action methods
+        //string connectionString = @"data source=DESKTOP-JVCT4QT\MSSQLSERVER01;integrated security=SSPI;database=DemoNewDB;TrustServerCertificate=true";
+
         Employee employee = new Employee();
         [HttpGet]
         public IActionResult Get()
         {
-           
-           return Ok(employee.GetEmployees());
+            List<Employee> employees = new List<Employee>();
+            // data source=[SERVER_NAME];integrated security=SSPI;database=[DATABASE_NAME] -> windows Authentication
+            // data source=[SERVER_NAME];user Id=[USER_NAME];password=[PASSWORD];database=[DATABASE_NAME] -> SQL Authentication
+            // database or initial catalog
+            string address = "UK";
+            string connectionString = _configuration.GetConnectionString("demodbCS");
+
+            using (SqlConnection con = new SqlConnection(connectionString))
+            {
+                SqlCommand cmd = new SqlCommand("select * from tblEmployee where emp_address='"+ address + "'", con);
+                con.Open();
+                // if we are getting multiple record form the database then only use the datareader
+                using (SqlDataReader reader = cmd.ExecuteReader())
+                {
+                    // it is read only forward only 
+                    while (reader.Read())
+                    {
+                        Employee emp = new Employee();
+                        emp.Name = reader["emp_name"].ToString();
+                        emp.Address = reader["emp_address"].ToString();
+                        emp.Age = Convert.ToInt32(reader["age"]);
+                        employees.Add(emp);
+                    }
+                }
+            }
+           return Ok(employees);
         }
 
-        // Cross Origin -> 
-
-        // http://localhost:5266 - .NET API
-
-        // http://localhost:3000  - REact ( Whitelisted)
-        // http://localhost:4000  - REact 
-
-        // Status Code
-        // 500 - internal server error
-        // 404 - resource not found ( entity etc..)
-        // 201 created - resource is sent to the server and created 
-        // 200 -> we send something to the server and it passed 
-        // 400 -> Bad request ( we have something wrong with the API end point data and it is not making call to the server)
-        // 204 -> No resource Found 
-        // 401 unauthorized
-        // 403 Forbidden
-        // 405 Method Not Allowed
-        // 408 Request Timeout
-        // 414 URI Too Long
-        // 415 Unsupported Media Type
-        // 429 Too Many Requests 
-
-
-        // HR, Employee, Admin, Payroll, INventory
-        // ONe Database ( SQL SERVER)
-        // Multiple table for multiple module 
-        // Server -> hosted the application 
-
-        // Server -> get down 
-        // Server- > Database 
-        // Monolithic 
-
-        // Microservices 
-
-        // HR-> API Project -> Server 1  -> Java ,MongoDB HR
-
-        // EMPLOYEE -> API project -> Server 2 -> .net  , SQL server 
-
-        // ADMIN -> API Project  -> server 3 -> python , MYSQL
-
-        // Payroll -> API -> Server 4 -> Node , NOSQL
+        
 
         [HttpGet]
         [Route("LoadEmployees")]
+        
         //[EnableCors("_MyEmployeePolicy")]
-        public Employee employeesFromList(int empId,string gender)
+        public List<TblEmployee> employeesFromList()
         {
-            // Database
-            return employee.GetEmployees().FirstOrDefault(x => x.Id == empId);
+           
+            return context.TblEmployees.Where(x=>x.EmpAddress=="UK").ToList();
+            
         }
 
         [HttpGet]
@@ -87,6 +86,17 @@ namespace DemoAPI.Controllers
         {
             try
             {
+                using (SqlConnection con = new SqlConnection(_configuration.GetConnectionString("demodbCS")))
+                {
+                    //SqlCommand cmd = new SqlCommand("insert into tblEmployee values('"+newEmployee.Name+"',1,"+newEmployee.Salary+",'"+newEmployee.Email+"',"+newEmployee.Age+",'"+newEmployee.Address+"',2,1,'"+DateTime.Now+"',12000)", con);
+                    SqlCommand cmd = new SqlCommand("select emp_name from tblEmployee where emp_id=3 ", con);
+                 
+                    con.Open();
+                    object result = cmd.ExecuteScalar();
+
+
+                }
+
                 //throw new Exception("Custom exception");
                 Employee employee = new Employee();
                 Employee emp = employee.GetEmployees().FirstOrDefault(x => x.Id == id);
@@ -110,29 +120,75 @@ namespace DemoAPI.Controllers
         // POST api/<EmployeesController>
         [HttpPost]
         //[DisableCors]
-        public void Post([FromBody] int id,[FromQuery] Employee newEmployee)
+        public void Post([FromBody] TblEmployee newEmployee)
         {
 
+            TblEmployee employee = new TblEmployee();
+            context.Entry(employee).State = EntityState.Added;
+
+            context.TblEmployees.Add(newEmployee);
+            context.SaveChanges();
             
+            //using (SqlConnection con = new SqlConnection(_configuration.GetConnectionString("demodbCS")))
+            //{
+            //    //SqlCommand cmd = new SqlCommand("insert into tblEmployee values('"+newEmployee.Name+"',1,"+newEmployee.Salary+",'"+newEmployee.Email+"',"+newEmployee.Age+",'"+newEmployee.Address+"',2,1,'"+DateTime.Now+"',12000)", con);
+            //    SqlCommand cmd = new SqlCommand("insert into tblEmployee values(@name,1,@salary,@email,@age,@address,2,1,@date,12000)", con);
+            //    cmd.Parameters.AddWithValue("@name", newEmployee.Name);
+            //    cmd.Parameters.AddWithValue("@salary", newEmployee.Salary);
+            //    cmd.Parameters.AddWithValue("@email", newEmployee.Email);
+            //    cmd.Parameters.AddWithValue("@age", newEmployee.Age);
+            //    cmd.Parameters.AddWithValue("@address", newEmployee.Address);
+            //    cmd.Parameters.AddWithValue("@date", DateTime.Now);
+
+            //    con.Open();
+            //     int result = cmd.ExecuteNonQuery();
+
+                
+            //}
+
 
         }
 
         // PUT api/<EmployeesController>/5
         [HttpPut("{id}")]
-        public void Put(int id, [FromBody] Employee newEmployeeValue)
+        public void Put(int id, [FromBody] TblEmployee newEmployee)
         {
-          Employee emptoUpdate =  employee.GetEmployees().FirstOrDefault(x => x.Id == id);
-            emptoUpdate.Name = newEmployeeValue.Name;
-            emptoUpdate.Pincode = newEmployeeValue.Pincode;
-            emptoUpdate.Address = newEmployeeValue.Address;
+            TblEmployee employee=  context.TblEmployees.FirstOrDefault(x => x.EmpId == id);
+            if(employee!=null)
+            {
+                employee.EmpName = newEmployee.EmpName;
+                employee.MonthlySalary= newEmployee.MonthlySalary;
+                context.Entry(employee).State = EntityState.Modified;
+                context.SaveChanges();  
+            }
+         
+
+            //using (SqlConnection con = new SqlConnection(_configuration.GetConnectionString("demodbCS")))
+            //{
+            //    //SqlCommand cmd = new SqlCommand("insert into tblEmployee values('"+newEmployee.Name+"',1,"+newEmployee.Salary+",'"+newEmployee.Email+"',"+newEmployee.Age+",'"+newEmployee.Address+"',2,1,'"+DateTime.Now+"',12000)", con);
+            //    SqlCommand cmd = new SqlCommand("update  tblEmployee set emp_name=@name, email=@email, monthly_salary=@salary where emp_id=@id ", con);
+            //    cmd.Parameters.AddWithValue("@name", newEmployee.Name);
+            //    cmd.Parameters.AddWithValue("@salary", newEmployee.Salary);
+            //    cmd.Parameters.AddWithValue("@email", newEmployee.Email);
+                
+            //    cmd.Parameters.AddWithValue("@id", id);
+
+            //    con.Open();
+            //    int result = cmd.ExecuteNonQuery();
+
+
+            //}
         }
 
         // DELETE api/<EmployeesController>/5
         [HttpDelete("{id}")]
         public void Delete(int id)
         {
-            Employee emptoDelete = employee.GetEmployees().FirstOrDefault(x => x.Id == id);
-            employee.GetEmployees().Remove(emptoDelete);
+            TblEmployee employee = context.TblEmployees.FirstOrDefault(x => x.EmpId == id);
+            context.Entry(employee).State = EntityState.Deleted;
+            context.SaveChanges();
+            //Employee emptoDelete = employee.GetEmployees().FirstOrDefault(x => x.Id == id);
+            //employee.GetEmployees().Remove(emptoDelete);
         }
     }
 }
